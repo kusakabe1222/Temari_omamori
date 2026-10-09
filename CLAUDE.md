@@ -12,6 +12,7 @@
 - Python 3.11以上、FastAPI、SQLite（標準の sqlite3。テーブル定義は `app/schema.sql`）。
 - 画面はサーバー側のHTMLテンプレート（Jinja2）＋素のJavaScript。グラフは Chart.js を `static/vendor/` に置いて使う（CDNに頼らない）。
 - PC 直結の BLE は bleak（`requirements-ble.txt`）。LINE への送信は LINE Messaging API（標準の urllib で送る）。
+- 端末（M5StickS3）のプログラムは `firmware/omamori_m5/`（Arduino・M5Unified・NimBLE-Arduino 2.x）。BLE の UUID などは `docs/ble_protocol.md`・`scripts/ble_gateway.py`・`firmware/omamori_m5/config.h` の3か所をそろえる。
 - 開発PCは Windows（PowerShell）。コマンドは PowerShell で動く形で書く。
 - 依存ライブラリは最小限にし、`requirements.txt` に版を固定して書く。
 
@@ -47,7 +48,7 @@
 1. DBとAPI。ダミーデータを作るスクリプト `scripts/seed.py` も作る
 2. タブレットの代わりにAPIへ送る「にせタブレット」スクリプト `scripts/fake_tablet.py`（BLEが完成する前にテストするため）
 3. 画面（一覧 → 個人ページ → 登録 → 設定 → CSV）
-4. 本物の端末とつなぐ（PC 直結: `scripts/ble_gateway.py`）
+4. 本物の端末とつなぐ（PC 直結: `scripts/ble_gateway.py`、端末側: `firmware/omamori_m5/`）
 
 各段階で、起動方法と動作確認の手順を README に追記すること。
 

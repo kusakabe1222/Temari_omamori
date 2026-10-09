@@ -12,7 +12,7 @@
 
 - **PC直結**: タブレットの代わりに、サーバーと同じ PC が BLE で端末から歩数を受け取ります。
   サーバーの入口（`POST /api/sync`）は同じなので、あとからタブレット経由に戻すこともできます。
-- BLE の決まりは [docs/ble_protocol.md](docs/ble_protocol.md)。
+- BLE の決まりは [docs/ble_protocol.md](docs/ble_protocol.md)。端末（M5StickS3）側のプログラムは [firmware/](firmware/README.md)。
 - 端末がまだないときは、`scripts/fake_tablet.py`（にせタブレット）で代わりのデータを送れます。
 
 ## フォルダの中身
@@ -31,6 +31,8 @@
 | `scripts/seed.py` | ダミーデータを作る |
 | `scripts/fake_tablet.py` | にせタブレット（API にテストデータを送る） |
 | `scripts/ble_gateway.py` | PC直結の BLE 中継 |
+| `firmware/omamori_m5/` | お守り端末（M5StickS3）のプログラム（Arduino）。**まだコンパイル・実機確認をしていない** |
+| `docs/ble_protocol.md` | 端末と PC の BLE 通信の決まり |
 | `tests/` | 自動テスト |
 | `docs/review/` | レビュー用メモ（授業のルール） |
 
@@ -178,7 +180,8 @@ Invoke-RestMethod http://127.0.0.1:8000/api/summary -Headers @{ "X-API-Key" = $k
 
 ## 段階4: PC直結の BLE 中継
 
-端末側のプログラムが [docs/ble_protocol.md](docs/ble_protocol.md) の決まりで動くようになったら使えます。
+端末側のプログラム（[firmware/README.md](firmware/README.md)）を M5StickS3 に書き込んでから使います。
+通信の決まりは [docs/ble_protocol.md](docs/ble_protocol.md)。
 
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements-ble.txt
