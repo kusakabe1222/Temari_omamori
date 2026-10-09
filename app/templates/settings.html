@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}設定{% endblock %}
+{% block content %}
+<h1>設定</h1>
+
+<section class="card">
+  <h2>アラートのしきい値</h2>
+  <p class="muted">いまは仮の値です。チームと施設で決めたら、ここで変えてください。</p>
+  <form method="post" action="/settings" class="stack">
+    <label class="inline-label">過負荷アラート：今日の歩数が目標の
+      <input class="input-short" type="number" name="overload_percent" value="{{ settings.overload_percent }}" min="100" max="500" step="1" required inputmode="numeric">
+      % 以上になったら出す
+    </label>
+    <label class="inline-label">未同期アラート：
+      <input class="input-short" type="number" name="no_sync_hours" value="{{ settings.no_sync_hours }}" min="0" max="720" step="1" required inputmode="numeric">
+      時間データが届かなかったら出す（0 にすると出しません）
+    </label>
+    <label class="check">
+      <input type="checkbox" name="line_alert_enabled" value="1"{% if settings.line_alert_enabled %} checked{% endif %}>
+      過負荷アラートを LINE に自動で送る（1人につき1日1回まで）
+    </label>
+    <div><button type="submit" class="btn btn-primary">保存</button></div>
+  </form>
+</section>
+
+<section class="card">
+  <h2>LINE 連携</h2>
+  {% if line_configured %}
+  <p><span class="badge badge-ok">設定済み</span> .env に書いた送り先（LINE_TO）にメッセージを送ります。</p>
+  <div class="button-list">
+    <form method="post" action="/line/test"><button type="submit" class="btn">テスト送信</button></form>
+    <form method="post" action="/line/summary"><input type="hidden" name="back_to" value="/settings"><button type="submit" class="btn">今日のまとめを送る</button></form>
+  </div>
+  {% else %}
+  <p><span class="badge badge-info">未設定</span> .env に LINE_CHANNEL_ACCESS_TOKEN と LINE_TO を入れてサーバーを起動し直すと使えます（README の「LINE 連携」）。</p>
+  {% endif %}
+  <p class="muted">LINE に送るのはニックネームと歩数だけです。</p>
+
+  <h3>送信の記録（新しい順に10件）</h3>
+  {% if line_logs %}
+  <table class="table responsive">
+    <thead><tr><th>日時</th><th>種類</th><th>対象</th><th>結果</th></tr></thead>
+    <tbody>
+      {% for log in line_logs %}
+      <tr>
+        <td data-label="日時">{{ log.sent_at | dt }}</td>
+        <td data-label="種類">{{ {"alert": "過負荷アラート", "summary": "今日のまとめ", "test": "テスト"}.get(log.kind, log.kind) }}</td>
+        <td data-label="対象">{{ (log.display_name ~ "さん") if log.display_name else "—" }}</td>
+        <td data-label="結果">{% if log.ok %}<span class="badge badge-ok">送信</span>{% else %}<span class="badge badge-danger">失敗</span> <span class="small">{{ log.error }}</span>{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">まだ送っていません。</p>
+  {% endif %}
+</section>
+{% endblock %}

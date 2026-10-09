@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}{{ user.display_name }}さん{% endblock %}
+{% block content %}
+<p class="breadcrumb"><a href="/">← 利用者一覧</a></p>
+<div class="page-head">
+  <div>
+    <h1>{{ user.display_name }}さん</h1>
+    <p class="muted">開始前の平均 {{ user.baseline_steps | num }}歩 ＋ {{ goal_increment | num }}歩 ＝ 目標 {{ user.goal_steps | num }}歩</p>
+  </div>
+  <a class="btn" href="/manage#user-{{ user.id }}">登録内容を編集</a>
+</div>
+
+<section class="stats" aria-label="今日のようす">
+  <div class="stat"><span class="stat-label">今日の歩数</span><span class="stat-value">{{ user.today_steps | num }}<small>歩</small></span></div>
+  <div class="stat"><span class="stat-label">目標達成率</span><span class="stat-value">{{ user.rate }}<small>%</small></span></div>
+  <div class="stat"><span class="stat-label">直近の同期日時</span><span class="stat-value stat-value-text">{{ (user.last_seen_at | dt) or "まだありません" }}</span></div>
+  <div class="stat"><span class="stat-label">端末</span><span class="stat-value stat-value-text">{{ user.devices | join("、") or "なし" }}</span></div>
+</section>
+
+{% if user.alerts %}
+<p class="badge-row">{% for a in user.alerts %}<span class="badge badge-{{ a.level }}">{{ a.label }}</span> {{ a.detail }}　{% endfor %}</p>
+{% endif %}
+
+<section class="card">
+  <div class="card-head">
+    <h2>日別の歩数</h2>
+    <div class="segmented" role="group" aria-label="表示する期間">
+      <button type="button" data-days="7" aria-pressed="false">7日</button>
+      <button type="button" data-days="14" aria-pressed="true">14日</button>
+      <button type="button" data-days="30" aria-pressed="false">30日</button>
+    </div>
+  </div>
+  <div id="daily" data-user-id="{{ user.id }}" data-goal="{{ user.goal_steps }}" data-overload="{{ overload_percent }}" data-today="{{ today }}">
+    <div class="chart-box"><canvas id="daily-chart" role="img" aria-label="日別歩数のグラフ（目標の線つき）"></canvas></div>
+    <p class="chart-key small"><span class="key key-bar"></span>目標まで届かず <span class="key key-ok"></span>目標を達成 <span class="key key-danger"></span>過負荷の目安以上</p>
+    <p id="daily-status" class="muted" role="status"></p>
+    <table class="table" id="daily-table">
+      <thead><tr><th>日付</th><th class="num">歩数</th><th class="num">目標比</th><th>達成</th></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</section>
+
+<section class="card">
+  <h2>直近の同期</h2>
+  {% if logs %}
+  <table class="table responsive">
+    <thead><tr><th>受信日時</th><th>端末</th><th>結果</th><th class="num">新規／重複</th><th class="num">RSSI</th><th class="num">同期時間</th></tr></thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td data-label="受信日時">{{ log.received_at | dt }}</td>
+        <td data-label="端末">{{ log.device_id }}</td>
+        <td data-label="結果">{% if log.status == "ok" %}<span class="badge badge-ok">成功</span>{% else %}<span class="badge badge-danger" title="{{ log.error or '' }}">失敗</span>{% endif %}</td>
+        <td data-label="新規／重複" class="num">{{ log.inserted_count }}／{{ log.skipped_count }}</td>
+        <td data-label="RSSI" class="num">{{ log.rssi if log.rssi is not none else "—" }}</td>
+        <td data-label="同期時間" class="num">{{ log.duration_sec | sec }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">まだ同期の記録がありません。</p>
+  {% endif %}
+</section>
+{% endblock %}
+{% block scripts %}
+<script src="/static/vendor/chart.umd.min.js"></script>
+<script src="/static/user_detail.js"></script>
+{% endblock %}

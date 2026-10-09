@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}同期記録{% endblock %}
+{% block content %}
+<h1>同期の記録</h1>
+<p class="muted">BLE 同期の検証（距離・成功率・同期時間）に使います。中継スクリプトの <code>--note</code> で付けたメモ（例: 距離3m）もここに出ます。全件は <a href="/export">CSV</a> で保存できます。</p>
+
+<section class="card">
+  <h2>端末ごとのまとめ</h2>
+  {% if stats %}
+  <table class="table responsive">
+    <thead><tr><th>端末</th><th class="num">同期の回数</th><th class="num">成功率</th><th class="num">RSSI 平均（最小〜最大）</th><th class="num">同期時間の平均</th><th>最後の同期</th></tr></thead>
+    <tbody>
+      {% for s in stats %}
+      <tr>
+        <td data-label="端末">{{ s.device_id }}</td>
+        <td data-label="同期の回数" class="num">{{ s.total | num }}回</td>
+        <td data-label="成功率" class="num">{{ s.success_rate }}%（{{ s.ok_count }}/{{ s.total }}）</td>
+        <td data-label="RSSI 平均" class="num">{% if s.avg_rssi is not none %}{{ s.avg_rssi | round(1) }}（{{ s.min_rssi }}〜{{ s.max_rssi }}）{% else %}—{% endif %}</td>
+        <td data-label="同期時間の平均" class="num">{{ s.avg_duration | sec }}</td>
+        <td data-label="最後の同期">{{ s.last_at | dt }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">まだ同期の記録がありません。</p>
+  {% endif %}
+</section>
+
+<section class="card">
+  <div class="card-head">
+    <h2>新しい順（200件まで）</h2>
+    <form method="get" action="/sync-logs" class="inline-form">
+      <label>端末
+        <select name="device" onchange="this.form.submit()">
+          <option value="">すべて</option>
+          {% for d in device_ids %}<option value="{{ d }}"{% if d == selected %} selected{% endif %}>{{ d }}</option>{% endfor %}
+        </select>
+      </label>
+      <noscript><button type="submit" class="btn">絞り込む</button></noscript>
+    </form>
+  </div>
+  {% if logs %}
+  <div class="table-scroll">
+  <table class="table responsive nowrap">
+    <thead><tr><th>受信日時</th><th>端末</th><th>持ち主</th><th>送信元</th><th>結果</th><th class="num">件数（新規／スキップ）</th><th class="num">RSSI</th><th class="num">同期時間</th><th>メモ・エラー</th></tr></thead>
+    <tbody>
+      {% for log in logs %}
+      <tr>
+        <td data-label="受信日時">{{ log.received_at | dt("%m/%d %H:%M:%S") }}</td>
+        <td data-label="端末">{{ log.device_id }}</td>
+        <td data-label="持ち主">{{ log.display_name or "—" }}</td>
+        <td data-label="送信元">{{ log.source }}</td>
+        <td data-label="結果">{% if log.status == "ok" %}<span class="badge badge-ok">成功</span>{% else %}<span class="badge badge-danger">失敗</span>{% endif %}</td>
+        <td data-label="件数" class="num">{{ log.record_count }}（{{ log.inserted_count }}／{{ log.skipped_count }}）</td>
+        <td data-label="RSSI" class="num">{{ log.rssi if log.rssi is not none else "—" }}</td>
+        <td data-label="同期時間" class="num">{{ log.duration_sec | sec }}</td>
+        <td data-label="メモ・エラー" class="small wrap">{{ log.note or "" }}{% if log.note and log.error %}／{% endif %}{{ log.error or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  {% else %}
+  <p class="muted">表示する記録がありません。</p>
+  {% endif %}
+</section>
+{% endblock %}

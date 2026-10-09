@@ -1,0 +1,66 @@
+{% extends "base.html" %}
+{% block title %}利用者一覧{% endblock %}
+{% block head %}<meta http-equiv="refresh" content="60">{% endblock %}
+{% block content %}
+{% set overload = summary.settings.overload_percent %}
+<div class="page-head">
+  <div>
+    <h1>利用者一覧</h1>
+    <p class="muted">{{ summary.date | jdate }} {{ summary.generated_at | dt("%H:%M") }} 時点（1分ごとに自動で更新します）</p>
+  </div>
+  {% if line_configured %}
+  <form method="post" action="/line/summary">
+    <input type="hidden" name="back_to" value="/">
+    <button type="submit" class="btn">LINEに今日のまとめを送る</button>
+  </form>
+  {% endif %}
+</div>
+
+<section class="stats" aria-label="今日のようす">
+  <div class="stat"><span class="stat-label">利用者</span><span class="stat-value">{{ summary.user_count }}<small>人</small></span></div>
+  <div class="stat"><span class="stat-label">今日の目標を達成</span><span class="stat-value">{{ summary.achieved_count }}<small>人</small></span></div>
+  <div class="stat{% if summary.alerts %} stat-alert{% endif %}"><span class="stat-label">アラート</span><span class="stat-value">{{ summary.alerts | length }}<small>件</small></span></div>
+</section>
+
+{% if summary.alerts %}
+<section class="alert-list" aria-label="アラート">
+  {% for a in summary.alerts %}
+  <a class="alert-item alert-{{ a.level }}" href="/users/{{ a.user_id }}">
+    <span class="badge badge-{{ a.level }}">{{ a.label }}</span>
+    <strong>{{ a.display_name }}さん</strong><span>{{ a.detail }}</span>
+  </a>
+  {% endfor %}
+</section>
+{% endif %}
+
+{% if summary.users %}
+<table class="table responsive">
+  <thead>
+    <tr><th>ニックネーム</th><th class="num">今日の歩数</th><th class="num">目標</th><th>目標達成率</th><th>アラート</th><th>最終同期</th></tr>
+  </thead>
+  <tbody>
+    {% for u in summary.users %}
+    <tr>
+      <td data-label="ニックネーム"><a class="name-link" href="/users/{{ u.id }}">{{ u.display_name }}</a></td>
+      <td data-label="今日の歩数" class="num big">{{ u.today_steps | num }}<small>歩</small></td>
+      <td data-label="目標" class="num">{{ u.goal_steps | num }}<small>歩</small></td>
+      <td data-label="目標達成率">
+        <div class="meter-wrap">
+          <div class="meter" role="img" aria-label="目標の{{ u.rate }}%">
+            <div class="meter-bar{% if u.rate >= overload %} is-over{% elif u.achieved %} is-done{% endif %}" style="width: {{ [u.rate, 100] | min }}%"></div>
+          </div>
+          <span class="meter-text">{{ u.rate }}%</span>
+        </div>
+      </td>
+      <td data-label="アラート">
+        {% for a in u.alerts %}<span class="badge badge-{{ a.level }}" title="{{ a.detail }}">{{ a.label }}</span>{% else %}<span class="muted">なし</span>{% endfor %}
+      </td>
+      <td data-label="最終同期">{{ (u.last_seen_at | dt) or "—" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<div class="empty">利用者がまだ登録されていません。<a href="/manage">登録・編集</a>から追加してください。</div>
+{% endif %}
+{% endblock %}

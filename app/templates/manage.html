@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}登録・編集{% endblock %}
+{% block content %}
+<h1>利用者・端末の登録と編集</h1>
+
+<section class="card">
+  <h2>利用者を追加</h2>
+  <p class="muted">本名は入れず、ニックネームで登録してください。目標は「開始前の1日平均歩数 ＋ {{ goal_increment | num }}歩」で自動で決まります。</p>
+  <form method="post" action="/users" class="form-row">
+    <label>ニックネーム<input name="display_name" required maxlength="30" autocomplete="off"></label>
+    <label>開始前の1日平均歩数<input name="baseline_steps" type="number" min="0" max="50000" step="1" required inputmode="numeric"></label>
+    <button type="submit" class="btn btn-primary">追加</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>利用者（{{ users | length }}人）</h2>
+  {% for u in users %}
+  <div class="edit-row" id="user-{{ u.id }}">
+    <form method="post" action="/users/{{ u.id }}" class="form-row">
+      <label>ニックネーム<input name="display_name" value="{{ u.display_name }}" required maxlength="30" autocomplete="off"></label>
+      <label>開始前の平均歩数<input name="baseline_steps" type="number" value="{{ u.baseline_steps }}" min="0" max="50000" step="1" required inputmode="numeric"></label>
+      <div class="readonly">目標<strong>{{ u.goal_steps | num }}歩</strong></div>
+      <button type="submit" class="btn">保存</button>
+    </form>
+    <form method="post" action="/users/{{ u.id }}/delete" data-confirm="{{ u.display_name }}さんを削除します。この人の歩数の記録もすべて消えます。よろしいですか？">
+      <input type="hidden" name="confirm" value="yes">
+      <button type="submit" class="btn btn-danger-ghost">削除</button>
+    </form>
+  </div>
+  {% else %}
+  <p class="muted">まだ利用者がいません。</p>
+  {% endfor %}
+</section>
+
+<section class="card">
+  <h2>端末を追加</h2>
+  <p class="muted">端末IDは、お守り端末が BLE で名乗る名前です（例: omamori-01）。登録していない端末からデータが届いたときも、データは保存され、下の一覧に「持ち主なし」で出てきます。</p>
+  <form method="post" action="/devices" class="form-row">
+    <label>端末ID<input name="device_id" required maxlength="64" placeholder="omamori-01" autocomplete="off" title="英数字と _ - : . が使えます"></label>
+    <label>持ち主
+      <select name="user_id">
+        <option value="">（まだ決めない）</option>
+        {% for u in users %}<option value="{{ u.id }}">{{ u.display_name }}</option>{% endfor %}
+      </select>
+    </label>
+    <button type="submit" class="btn btn-primary">追加</button>
+  </form>
+</section>
+
+<section class="card">
+  <h2>端末（{{ devices | length }}台）</h2>
+  <p class="muted">持ち主を変えても、これまでの歩数は前の持ち主の記録として残ります。持ち主が決まる前に届いた歩数は、最初に決めた持ち主の記録になります。</p>
+  {% for d in devices %}
+  {% set records = record_counts.get(d.device_id, 0) %}
+  <div class="edit-row{% if d.user_id is none %} is-unassigned{% endif %}">
+    <form method="post" action="/devices/{{ d.id }}" class="form-row">
+      <div class="readonly">端末ID<strong>{{ d.device_id }}</strong></div>
+      <label>持ち主
+        <select name="user_id">
+          <option value="">（持ち主なし）</option>
+          {% for u in users %}<option value="{{ u.id }}"{% if d.user_id == u.id %} selected{% endif %}>{{ u.display_name }}</option>{% endfor %}
+        </select>
+      </label>
+      <div class="readonly">最終同期<strong>{{ (d.last_seen_at | dt) or "—" }}</strong></div>
+      <div class="readonly">記録<strong>{{ records | num }}件</strong></div>
+      <button type="submit" class="btn">保存</button>
+    </form>
+    {% if not records %}
+    <form method="post" action="/devices/{{ d.id }}/delete" data-confirm="端末 {{ d.device_id }} を削除します。よろしいですか？">
+      <input type="hidden" name="confirm" value="yes">
+      <button type="submit" class="btn btn-danger-ghost">削除</button>
+    </form>
+    {% endif %}
+  </div>
+  {% else %}
+  <p class="muted">まだ端末がありません。</p>
+  {% endfor %}
+</section>
+{% endblock %}

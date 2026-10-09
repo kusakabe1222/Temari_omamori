@@ -1,0 +1,17 @@
+# パスワード・キー
+.env
+
+# Claude Code がこの PC で画面を確かめるための設定（PC ごとにパスが違う）
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# DB（ダミーデータや検証データが入るので、リポジトリには入れない）
+data/
+*.db
+*.db-wal
+*.db-shm

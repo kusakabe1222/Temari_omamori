@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}ログイン{% endblock %}
+{% block content %}
+<section class="card login-card">
+  <h1>ログイン</h1>
+  <p class="muted">チームで共有しているパスワードを入れてください。</p>
+  {% if error %}<div class="flash flash-error" role="alert">パスワードが違います。</div>{% endif %}
+  <form method="post" action="/login" class="stack">
+    <label>パスワード
+      <input type="password" name="password" required autofocus autocomplete="current-password">
+    </label>
+    <button type="submit" class="btn btn-primary">ログイン</button>
+  </form>
+</section>
+{% endblock %}

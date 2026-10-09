@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}{% endblock %} | お守り歩数計 管理</title>
+  <link rel="stylesheet" href="/static/style.css">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="/">お守り歩数計<span>管理者用</span></a>
+    {% if not hide_nav %}
+    <nav class="nav" aria-label="メニュー">
+      {% for key, href, label in [("index", "/", "利用者一覧"), ("manage", "/manage", "登録・編集"), ("sync", "/sync-logs", "同期記録"), ("settings", "/settings", "設定"), ("export", "/export", "CSV")] %}
+      <a href="{{ href }}"{% if active == key %} aria-current="page"{% endif %}>{{ label }}</a>
+      {% endfor %}
+    </nav>
+    <form method="post" action="/logout" class="logout"><button type="submit" class="link-button">ログアウト</button></form>
+    {% endif %}
+  </header>
+
+  <main class="container">
+    {% if flash %}<div class="flash flash-{{ flash.level }}" role="status">{{ flash.text }}</div>{% endif %}
+    {% block content %}{% endblock %}
+  </main>
+
+  <footer class="footer">試作（PD実践 CCCA-G1）／ ニックネームとダミーデータで使ってください</footer>
+  <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

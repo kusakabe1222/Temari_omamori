@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}CSVエクスポート{% endblock %}
+{% block content %}
+<h1>CSVエクスポート</h1>
+<p class="muted">検証の分析やレポートに使うデータを CSV で保存します。Excel で開いても文字化けしない形（UTF-8・BOM 付き）です。</p>
+
+<form method="get" action="/api/export.csv" class="card stack">
+  <div class="form-row">
+    <label>開始日<input type="date" name="from" value="{{ default_from }}"></label>
+    <label>終了日<input type="date" name="to" value="{{ today }}"></label>
+  </div>
+  <p class="muted">日付を空にすると、全期間を出します。</p>
+  <div class="export-choices">
+    <button type="submit" class="btn btn-primary" name="type" value="daily">日別の歩数</button>
+    <p>利用者ごとに1日1行。目標・達成したか・目標比（%）つき。記録のない日は出ません。</p>
+    <button type="submit" class="btn" name="type" value="steps">歩数の細かい記録</button>
+    <p>端末から届いたままの記録（時間帯ごとの歩数）。</p>
+    <button type="submit" class="btn" name="type" value="sync">同期の記録（BLE 検証用）</button>
+    <p>同期ごとに1行。成功・失敗、RSSI、同期時間（秒）、メモ。</p>
+  </div>
+</form>
+{% endblock %}
