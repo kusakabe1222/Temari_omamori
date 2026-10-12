@@ -5,13 +5,15 @@
 - データの流れ: お守り型端末（M5StickS3）→ BLE → **施設のPC（`scripts/ble_gateway.py`）** → HTTPでこのサーバーへ送信 → DBに保存 → 管理者用サイトで表示。
   - 2026-10-09 にタブレット経由から PC 直結に変更。サーバーの入口（`POST /api/sync`）は同じなので、タブレット経由にも戻せる。
   - BLE の決まりは `docs/ble_protocol.md`（仮の案。端末担当とそろえる）。
+- 本人用 LINE Bot（2026-10-13 追加）: 本人や家族が LINE で歩数・ポイント・ガチャを見る。管理者向けの LINE 通知はやめた。
+  - LINE の入口は別サーバー `app.bot_main`（ポート 8001、`/line/webhook` だけ）。トンネル（Cloudflare Tunnel / ngrok）で出すのは 8001 だけ。管理者用サイト（8000）は PC の中だけ。
 - 大学の授業（プロジェクトデザイン実践）の試作。本番運用はしない。学内でのデモと検証に使う。
 - 分担: DB＝林、バックエンド＝日下部、フロントエンド＝森脇（担当はチームで確認中）。
 
 ## 技術構成（変更するときは先に相談すること）
 - Python 3.11以上、FastAPI、SQLite（標準の sqlite3。テーブル定義は `app/schema.sql`）。
 - 画面はサーバー側のHTMLテンプレート（Jinja2）＋素のJavaScript。グラフは Chart.js を `static/vendor/` に置いて使う（CDNに頼らない）。
-- PC 直結の BLE は bleak（`requirements-ble.txt`）。LINE への送信は LINE Messaging API（標準の urllib で送る）。
+- PC 直結の BLE は bleak（`requirements-ble.txt`）。LINE は Messaging API の webhook と応答メッセージ（標準の urllib で送る）。リッチメニューは画像が要るので使わず、クイックリプライのボタンにする。
 - 端末（M5StickS3）のプログラムは `firmware/omamori_m5/`（Arduino・M5Unified・NimBLE-Arduino 2.x）。BLE の UUID などは `docs/ble_protocol.md`・`scripts/ble_gateway.py`・`firmware/omamori_m5/config.h` の3か所をそろえる。
 - 開発PCは Windows（PowerShell）。コマンドは PowerShell で動く形で書く。
 - 依存ライブラリは最小限にし、`requirements.txt` に版を固定して書く。
@@ -24,8 +26,9 @@
   - steps は「その時間帯に歩いた歩数」（累計ではない。仮）。日時は日本時間の ISO 8601 文字列で保存
 - `sync_logs`（同期の記録）: device_id, source, status, started_at, finished_at, record_count, inserted_count, skipped_count, rssi, note, error, received_at
   - BLE同期の検証（距離・成功率・同期時間）に使うので必ず残す。失敗した同期も残す
-- `settings`: 過負荷アラートのしきい値など。しきい値の値はチームと施設で決めるので、仮の値を入れて画面から変えられるようにする
-- `line_logs`: LINE に送った記録
+- `settings`: 過負荷アラートのしきい値、ポイント・ガチャのルールなど。値はチームと施設で決めるので、仮の値を入れて画面から変えられるようにする
+- `line_link_codes`（登録の番号）、`line_links`（LINE アカウントと利用者のつながり。1人に複数）、`gacha_draws`（ガチャの記録）、`line_events`（送り直しの見分け）
+  - ポイントは保存せず、歩数の記録から毎回計算する（`app/points.py`）。1,000歩=1pt、目標達成で+2pt、過負荷のしきい値を超えた分の歩数はポイントにしない、ガチャ1回 10pt（仮）
 
 ## API
 - `POST /api/sync`: 中継（PC・タブレット）から歩数をまとめて受け取る。`X-API-Key` ヘッダーが必要
@@ -33,13 +36,14 @@
   - 返り値: 受け取った件数と、重複でスキップした件数
 - `GET /api/users`, `GET /api/users/{id}/daily?from=&to=`: 日別歩数
 - `GET /api/summary`: 今日の歩数・目標達成率・アラートの一覧
-- `GET /api/export.csv`: 歩数と同期記録のCSV（検証の分析とレポート用）
+- `GET /api/export.csv`: 歩数・同期記録・ガチャのCSV（検証の分析とレポート用）
+- `POST /line/webhook`（`app.bot_main` の方）: LINE から届くイベント。`X-Line-Signature` の署名を必ず確かめる
 
 ## 画面（日本語、タブレットとPCの両方で見やすく）
 1. 利用者一覧: 名前、今日の歩数、目標達成率、アラートの有無
-2. 個人ページ: 日別歩数のグラフ（目標の線つき）、直近の同期日時
+2. 個人ページ: 日別歩数のグラフ（目標の線つき）、直近の同期日時、ポイント・ガチャ、LINE の登録の番号
 3. 利用者・端末の登録と編集
-4. 設定: 過負荷アラートのしきい値、LINE 連携
+4. 設定: 過負荷アラートのしきい値、ポイント・ガチャのルール
 5. CSVエクスポート
 - 同期記録（BLE 検証用）
 - ログインは共通パスワード1つでよい（`.env` に置く。リポジトリには入れない）。
@@ -49,6 +53,7 @@
 2. タブレットの代わりにAPIへ送る「にせタブレット」スクリプト `scripts/fake_tablet.py`（BLEが完成する前にテストするため）
 3. 画面（一覧 → 個人ページ → 登録 → 設定 → CSV）
 4. 本物の端末とつなぐ（PC 直結: `scripts/ble_gateway.py`、端末側: `firmware/omamori_m5/`）
+5. 本人用 LINE Bot（`app/bot_main.py`、試すときは `scripts/fake_line.py` と `LINE_DRY_RUN=1`）
 
 各段階で、起動方法と動作確認の手順を README に追記すること。
 
@@ -56,6 +61,6 @@
 - 説明は日本語で行う。大きな変更の前に、何をどう変えるかを先に説明する。
 - **授業のルール: 生成AIが作ったコードは、実行する前にチーム全員でレビューし、結果を担当教員（佐野先生）に報告する。** そのため、変更のたびに `docs/review/` にレビュー用メモを書く（変更したファイル、何をするコードか、動かし方、ファイル削除や外部への通信など注意が必要な処理の有無）。
 - **生成AIで作った画像は使わない**（授業のルール）。アイコンが必要なときは文字か、ライセンスが明確な素材にする。
-- 本物の利用者の名前や個人情報は使わない。テストはニックネームとダミーデータで行う。LINE に送るのもニックネームと歩数だけ。
+- 本物の利用者の名前や個人情報は使わない。テストはニックネームとダミーデータで行う。LINE に送るのもニックネーム・歩数・ポイント・ガチャのメッセージだけ。LINE のプロフィールは取らない。
 - パスワードやキーはコードに直接書かない。
 - データを消す操作（DBの初期化など）は、実行前に必ず確認を取る。

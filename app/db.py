@@ -11,9 +11,11 @@ SCHEMA_PATH = Path(__file__).with_name("schema.sql")
 
 # 設定の初期値（仮の値。チームと施設で決めたら設定画面で変える）
 DEFAULT_SETTINGS: dict[str, int] = {
-    "overload_percent": 150,  # 今日の歩数が目標の何%以上で過負荷アラートを出すか
-    "no_sync_hours": 24,      # 何時間データが届かなければ未同期アラートを出すか（0 = 出さない）
-    "line_alert_enabled": 0,  # 1 = 過負荷アラートを LINE に自動で送る
+    "overload_percent": 150,   # 今日の歩数が目標の何%以上で過負荷アラートを出すか（これを超えた分はポイントにもしない）
+    "no_sync_hours": 24,       # 何時間データが届かなければ未同期アラートを出すか（0 = 出さない）
+    "steps_per_point": 1000,   # 何歩ごとに1ポイントか
+    "goal_bonus_points": 2,    # 目標を達成した日にもらえるボーナス
+    "gacha_cost": 10,          # ガチャ1回に使うポイント
 }
 
 

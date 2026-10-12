@@ -7,10 +7,10 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, Request
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 
-from . import db, export, line_notify, services
+from . import db, export, services
 from .deps import Conn
 from .schemas import SyncIn
 
@@ -30,13 +30,9 @@ def _parse_date(text: str | None, name: str) -> date | None:
 
 
 @router.post("/sync")
-def sync(data: SyncIn, request: Request, background: BackgroundTasks, conn: Conn) -> dict:
+def sync(data: SyncIn, conn: Conn) -> dict:
     """中継から歩数をまとめて受け取る。返り値: 受け取った件数・新しく保存した件数・重複でスキップした件数。"""
-    result = services.ingest_sync(conn, data, db.now_jst())
-    if result["inserted"] and result["user_id"] is not None:
-        # LINE への送信は時間がかかることがあるので、返事をしてから行う
-        background.add_task(line_notify.notify_overload_if_needed, request.app.state.config, result["user_id"])
-    return result
+    return services.ingest_sync(conn, data, db.now_jst())
 
 
 @router.get("/users")
@@ -74,7 +70,7 @@ def summary(conn: Conn) -> dict:
 @router.get("/export.csv")
 def export_csv(conn: Conn, kind: str = Query("daily", alias="type"),
                from_: str | None = Query(None, alias="from"), to: str | None = None) -> Response:
-    """CSV を返す。type: daily（日別歩数）/ steps（細かい記録）/ sync（同期の記録）。日付を省くと全期間。"""
+    """CSV を返す。type: daily（日別歩数とポイント）/ steps（細かい記録）/ sync（同期の記録）/ gacha（ガチャ）。日付を省くと全期間。"""
     if kind not in export.KINDS:
         raise HTTPException(400, f"type は {' / '.join(export.KINDS)} のどれかにしてください")
     start, end = _parse_date(from_, "from"), _parse_date(to, "to")

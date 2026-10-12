@@ -12,11 +12,13 @@
   <p class="muted">日付を空にすると、全期間を出します。</p>
   <div class="export-choices">
     <button type="submit" class="btn btn-primary" name="type" value="daily">日別の歩数</button>
-    <p>利用者ごとに1日1行。目標・達成したか・目標比（%）つき。記録のない日は出ません。</p>
+    <p>利用者ごとに1日1行。目標・達成したか・目標比（%）・その日のポイントつき。記録のない日は出ません。</p>
     <button type="submit" class="btn" name="type" value="steps">歩数の細かい記録</button>
     <p>端末から届いたままの記録（時間帯ごとの歩数）。</p>
     <button type="submit" class="btn" name="type" value="sync">同期の記録（BLE 検証用）</button>
     <p>同期ごとに1行。成功・失敗、RSSI、同期時間（秒）、メモ。</p>
+    <button type="submit" class="btn" name="type" value="gacha">ガチャの記録</button>
+    <p>ガチャ1回ごとに1行。レア度・メッセージ・使ったポイント（LINE のユーザーID は出しません）。</p>
   </div>
 </form>
 {% endblock %}

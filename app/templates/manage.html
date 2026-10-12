@@ -23,7 +23,7 @@
       <div class="readonly">目標<strong>{{ u.goal_steps | num }}歩</strong></div>
       <button type="submit" class="btn">保存</button>
     </form>
-    <form method="post" action="/users/{{ u.id }}/delete" data-confirm="{{ u.display_name }}さんを削除します。この人の歩数の記録もすべて消えます。よろしいですか？">
+    <form method="post" action="/users/{{ u.id }}/delete" data-confirm="{{ u.display_name }}さんを削除します。この人の歩数の記録・ポイントとガチャの記録・LINE の登録もすべて消えます。よろしいですか？">
       <input type="hidden" name="confirm" value="yes">
       <button type="submit" class="btn btn-danger-ghost">削除</button>
     </form>

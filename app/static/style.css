@@ -286,3 +286,5 @@ input, select {
 }
 
 .login-card { max-width: 420px; margin: 3rem auto; }
+.link-code { font-size: 1.1rem; margin: .5rem 0 0; }
+.link-code strong { font-size: 2rem; letter-spacing: .15em; font-variant-numeric: tabular-nums; margin-left: .5rem; }

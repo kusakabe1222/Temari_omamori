@@ -35,7 +35,9 @@ WALK_HOURS = (7, 19)         # 7時〜19時に歩く
 SYNC_HOURS = (12, 19)        # 1日2回同期する
 FAIL_RATE = 0.06             # 同期が失敗する割合
 STALE_HOURS = 30
-TABLES_TO_CLEAR = ["line_logs", "sync_logs", "step_records", "devices", "users"]  # settings は残す
+# settings は残す。順番は、ほかの表から参照されている表があとになるように並べる
+TABLES_TO_CLEAR = ["line_events", "gacha_draws", "line_links", "line_link_codes",
+                   "sync_logs", "step_records", "devices", "users"]
 
 
 def slot_weights() -> list[tuple[int, float]]:
@@ -108,7 +110,8 @@ def clear_data(conn) -> bool:
     counts = {t: conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0] for t in TABLES_TO_CLEAR}
     print("次のデータをすべて消します（設定は残します）:")
     print(f"  利用者 {counts['users']}人 / 端末 {counts['devices']}台 / 歩数の記録 {counts['step_records']}件 / "
-          f"同期の記録 {counts['sync_logs']}件 / LINE 送信の記録 {counts['line_logs']}件")
+          f"同期の記録 {counts['sync_logs']}件 / ガチャの記録 {counts['gacha_draws']}件 / "
+          f"LINE の登録 {counts['line_links']}件")
     try:
         answer = input("本当に消してよければ yes と入力してください: ")
     except EOFError:

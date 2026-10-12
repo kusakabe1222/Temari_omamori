@@ -6,9 +6,11 @@ import io
 import sqlite3
 from datetime import date, timedelta
 
+from . import db
+from .points import day_points
 from .services import duration_seconds
 
-KINDS = ("daily", "steps", "sync")
+KINDS = ("daily", "steps", "sync", "gacha")
 
 
 def _safe(value):
@@ -51,18 +53,31 @@ def build(conn: sqlite3.Connection, kind: str, start: date | None, end: date | N
 
     if kind == "daily":
         where, params = _where("r.measured_at", start, end)
-        header = ["date", "user_id", "display_name", "steps", "record_count", "goal_steps", "achieved", "rate_percent"]
+        header = ["date", "user_id", "display_name", "steps", "record_count", "goal_steps", "achieved", "rate_percent", "points"]
         rows = conn.execute(
             f"""SELECT substr(r.measured_at, 1, 10) AS day, r.user_id, u.display_name, SUM(r.steps), COUNT(*), u.goal_steps
                 FROM step_records r JOIN users u ON u.id = r.user_id{where}
                 GROUP BY day, r.user_id ORDER BY day, r.user_id""",
             params,
         ).fetchall()
+        settings = db.get_settings(conn)
         result = []
         for day, user_id, name, steps, count, goal in rows:
             rate = round(steps * 100 / goal) if goal else 0
-            result.append([day, user_id, name, steps, count, goal, 1 if steps >= goal else 0, rate])
+            result.append([day, user_id, name, steps, count, goal, 1 if steps >= goal else 0, rate,
+                           day_points(steps, goal, settings)])
         return header, result
+
+    if kind == "gacha":
+        where, params = _where("g.drawn_at", start, end)
+        header = ["id", "drawn_at", "user_id", "display_name", "rarity", "prize_key", "message", "points_used"]
+        rows = conn.execute(
+            f"""SELECT g.id, g.drawn_at, g.user_id, u.display_name, g.rarity, g.prize_key, g.message, g.points_used
+                FROM gacha_draws g LEFT JOIN users u ON u.id = g.user_id{where}
+                ORDER BY g.drawn_at, g.id""",
+            params,
+        ).fetchall()
+        return header, [list(row) for row in rows]
 
     if kind == "sync":
         where, params = _where("s.received_at", start, end)

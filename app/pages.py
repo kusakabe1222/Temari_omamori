@@ -14,7 +14,7 @@ from fastapi import APIRouter, Form, Request
 from fastapi.responses import RedirectResponse, Response
 from fastapi.templating import Jinja2Templates
 
-from . import auth, db, line_notify, services
+from . import auth, db, gacha, line_links, points, services
 from .deps import Conn
 from .schemas import DEVICE_ID_PATTERN
 
@@ -39,9 +39,8 @@ MESSAGES = {
     "bad_input": ("error", "入力を確かめてください。"),
     "not_found": ("error", "見つかりませんでした。"),
     "settings_saved": ("ok", "設定を保存しました。"),
-    "line_sent": ("ok", "LINE に送りました。"),
-    "line_failed": ("error", "LINE に送れませんでした。下の「送信の記録」で理由を確かめてください。"),
-    "line_not_configured": ("error", "LINE の設定がありません。README の「LINE 連携」を見て .env に入れてください。"),
+    "link_code_issued": ("ok", "LINE の登録の番号を作りました。前の番号は使えなくなりました。"),
+    "line_unlinked": ("ok", "LINE の登録を解除しました。"),
 }
 
 
@@ -75,7 +74,7 @@ def render(request: Request, name: str, active: str | None, status_code: int = 2
         {
             "active": active,
             "flash": {"level": level_text[0], "text": level_text[1]} if level_text else None,
-            "line_configured": request.app.state.config.line_configured,
+            "line_bot_ready": request.app.state.config.line_bot_ready,
             **context,
         },
         status_code=status_code,
@@ -155,7 +154,28 @@ def user_detail(request: Request, user_id: int, conn: Conn):
         today=now.date().isoformat(),
         overload_percent=db.get_settings(conn)["overload_percent"],
         goal_increment=services.GOAL_INCREMENT,
+        points=points.summary(conn, user_id, now.date()),
+        draws=gacha.recent_draws(conn, user_id, limit=10),
+        link_code=line_links.get_code(conn, user_id),
+        line_links=line_links.links_for_user(conn, user_id),
     )
+
+
+@router.post("/users/{user_id}/link-code")
+def issue_link_code(user_id: int, conn: Conn):
+    if services.get_user(conn, user_id) is None:
+        return back("/", "not_found")
+    line_links.issue_code(conn, user_id, db.now_jst())
+    return back(f"/users/{user_id}", "link_code_issued")
+
+
+@router.post("/users/{user_id}/line-links/{link_id}/delete")
+def unlink_line(user_id: int, link_id: int, conn: Conn, confirm: Annotated[str, Form()] = ""):
+    if confirm != "yes":
+        return back(f"/users/{user_id}", "bad_input")
+    if not line_links.unlink_by_id(conn, user_id, link_id):
+        return back(f"/users/{user_id}", "not_found")
+    return back(f"/users/{user_id}", "line_unlinked")
 
 
 # ---------------------------------------------------------------- 3. 利用者・端末の登録と編集
@@ -255,49 +275,35 @@ def sync_logs(request: Request, conn: Conn, device: str = ""):
 
 @router.get("/settings")
 def settings_page(request: Request, conn: Conn):
-    line_logs = conn.execute(
-        """SELECT l.*, u.display_name FROM line_logs l LEFT JOIN users u ON u.id = l.user_id
-           ORDER BY l.id DESC LIMIT 10"""
-    ).fetchall()
-    return render(request, "settings.html", "settings", settings=db.get_settings(conn), line_logs=line_logs)
+    linked = conn.execute("SELECT COUNT(DISTINCT user_id) AS users, COUNT(*) AS accounts FROM line_links").fetchone()
+    return render(request, "settings.html", "settings", settings=db.get_settings(conn),
+                  linked_users=linked["users"], linked_accounts=linked["accounts"])
+
+
+# 設定の欄: (名前, 下限, 上限)
+SETTING_RANGES = {
+    "overload_percent": (100, 500),
+    "no_sync_hours": (0, 720),
+    "steps_per_point": (100, 10_000),
+    "goal_bonus_points": (0, 100),
+    "gacha_cost": (1, 1_000),
+}
 
 
 @router.post("/settings")
 def save_settings(conn: Conn,
                   overload_percent: Annotated[str, Form()] = "",
                   no_sync_hours: Annotated[str, Form()] = "",
-                  line_alert_enabled: Annotated[str, Form()] = ""):
-    overload = _int_in_range(overload_percent, 100, 500)
-    hours = _int_in_range(no_sync_hours, 0, 720)
-    if overload is None or hours is None:
+                  steps_per_point: Annotated[str, Form()] = "",
+                  goal_bonus_points: Annotated[str, Form()] = "",
+                  gacha_cost: Annotated[str, Form()] = ""):
+    texts = {"overload_percent": overload_percent, "no_sync_hours": no_sync_hours, "steps_per_point": steps_per_point,
+             "goal_bonus_points": goal_bonus_points, "gacha_cost": gacha_cost}
+    values = {key: _int_in_range(text, *SETTING_RANGES[key]) for key, text in texts.items()}
+    if any(value is None for value in values.values()):
         return back("/settings", "bad_input")
-    db.save_settings(conn, {
-        "overload_percent": overload,
-        "no_sync_hours": hours,
-        "line_alert_enabled": 1 if line_alert_enabled else 0,
-    })
+    db.save_settings(conn, values)
     return back("/settings", "settings_saved")
-
-
-@router.post("/line/test")
-def line_test(request: Request, conn: Conn):
-    config = request.app.state.config
-    if not config.line_configured:
-        return back("/settings", "line_not_configured")
-    ok, error = line_notify.send_text(config, "【お守り歩数計】テスト送信です。管理者用サイトから送りました。")
-    line_notify.log_send(conn, "test", ok, error)
-    return back("/settings", "line_sent" if ok else "line_failed")
-
-
-@router.post("/line/summary")
-def line_summary(request: Request, conn: Conn, back_to: Annotated[str, Form()] = "/"):
-    path = back_to if back_to in ("/", "/settings") else "/"
-    config = request.app.state.config
-    if not config.line_configured:
-        return back(path, "line_not_configured")
-    ok, error = line_notify.send_text(config, line_notify.format_summary(services.summary(conn, db.now_jst())))
-    line_notify.log_send(conn, "summary", ok, error)
-    return back(path, "line_sent" if ok else "line_failed")
 
 
 # ---------------------------------------------------------------- 5. CSV エクスポート

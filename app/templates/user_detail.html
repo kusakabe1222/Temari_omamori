@@ -63,6 +63,71 @@
   <p class="muted">まだ同期の記録がありません。</p>
   {% endif %}
 </section>
+
+<section class="card">
+  <h2>ポイント・ガチャ</h2>
+  <div class="stats">
+    <div class="stat"><span class="stat-label">いま使えるポイント</span><span class="stat-value">{{ points.available | num }}<small>pt</small></span></div>
+    <div class="stat"><span class="stat-label">今日の分</span><span class="stat-value">{{ points.today | num }}<small>pt</small></span></div>
+    <div class="stat"><span class="stat-label">もらった合計／使った合計</span><span class="stat-value stat-value-text">{{ points.earned | num }}pt／{{ points.spent | num }}pt</span></div>
+    <div class="stat"><span class="stat-label">ガチャを回した回数</span><span class="stat-value">{{ points.draw_count | num }}<small>回</small></span></div>
+  </div>
+  {% if draws %}
+  <h3>最近のガチャ（新しい順に10回）</h3>
+  <table class="table responsive">
+    <thead><tr><th>日時</th><th>結果</th><th>メッセージ</th><th class="num">使ったポイント</th></tr></thead>
+    <tbody>
+      {% for d in draws %}
+      <tr>
+        <td data-label="日時">{{ d.drawn_at | dt }}</td>
+        <td data-label="結果">{{ d.label }}</td>
+        <td data-label="メッセージ">{{ d.message }}</td>
+        <td data-label="使ったポイント" class="num">{{ d.points_used }}pt</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">まだガチャを回していません。</p>
+  {% endif %}
+</section>
+
+<section class="card" id="line">
+  <h2>LINE（本人用）</h2>
+  <p class="muted">本人や家族が LINE で歩数・ポイント・ガチャを見られます。下の番号を渡し、お守り歩数計の LINE を友だち追加して「登録 番号」と送ってもらってください。同じ番号で家族も登録できます。</p>
+  {% if link_code %}
+  <p class="link-code">登録の番号 <strong>{{ link_code[:3] }} {{ link_code[3:] }}</strong></p>
+  <p class="muted">LINE で送ることば: 「登録 {{ link_code }}」</p>
+  <form method="post" action="/users/{{ user.id }}/link-code" data-confirm="番号を作り直します。前の番号は使えなくなります（登録ずみの LINE はそのまま使えます）。よろしいですか？">
+    <button type="submit" class="btn">番号を作り直す</button>
+  </form>
+  {% else %}
+  <form method="post" action="/users/{{ user.id }}/link-code"><button type="submit" class="btn btn-primary">登録の番号を作る</button></form>
+  {% endif %}
+
+  <h3>登録している LINE（{{ line_links | length }}件）</h3>
+  {% if line_links %}
+  <table class="table responsive">
+    <thead><tr><th>LINE のユーザーID（一部）</th><th>登録した日時</th><th></th></tr></thead>
+    <tbody>
+      {% for link in line_links %}
+      <tr>
+        <td data-label="ユーザーID">{{ link.masked_id }}</td>
+        <td data-label="登録した日時">{{ link.linked_at | dt }}</td>
+        <td data-label="">
+          <form method="post" action="/users/{{ user.id }}/line-links/{{ link.id }}/delete" data-confirm="この LINE の登録を解除します。よろしいですか？">
+            <input type="hidden" name="confirm" value="yes">
+            <button type="submit" class="btn btn-danger-ghost">解除</button>
+          </form>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">まだ登録されていません。</p>
+  {% endif %}
+</section>
 {% endblock %}
 {% block scripts %}
 <script src="/static/vendor/chart.umd.min.js"></script>

@@ -54,13 +54,38 @@ CREATE TABLE IF NOT EXISTS settings (
     updated_at TEXT NOT NULL
 );
 
--- LINE に送った記録。同じアラートを1日に何度も送らないためにも使う。
-CREATE TABLE IF NOT EXISTS line_logs (
-    id         INTEGER PRIMARY KEY AUTOINCREMENT,
-    kind       TEXT    NOT NULL,   -- alert / summary / test
-    user_id    INTEGER,            -- アラートの対象（まとめ・テストは NULL）
-    alert_date TEXT,               -- アラートの日付
-    ok         INTEGER NOT NULL,   -- 1 = 送れた
-    error      TEXT,
-    sent_at    TEXT    NOT NULL
+-- ---- LINE（本人用）・ポイント・ガチャ（2026-10-13 追加） ----
+-- ポイントは歩数の記録から毎回計算するので、ここには「使った」記録（ガチャ）だけを残す。
+
+-- LINE で登録するための番号（利用者ごとに1つ。職員が管理者用サイトで作り、本人や家族に渡す）
+CREATE TABLE IF NOT EXISTS line_link_codes (
+    user_id    INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    code       TEXT    NOT NULL UNIQUE,   -- 6けたの数字
+    created_at TEXT    NOT NULL
+);
+
+-- LINE のアカウントと利用者のつながり（1人に、本人・家族など複数つなげられる）
+CREATE TABLE IF NOT EXISTS line_links (
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    line_user_id TEXT    NOT NULL UNIQUE,  -- LINE のユーザーID（U で始まる）。プロフィールは取らない
+    user_id      INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    linked_at    TEXT    NOT NULL
+);
+
+-- ガチャを回した記録
+CREATE TABLE IF NOT EXISTS gacha_draws (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    prize_key   TEXT    NOT NULL,   -- どのメッセージが出たか（app/gacha.py の key）
+    rarity      TEXT    NOT NULL,   -- common / rare / super_rare
+    message     TEXT    NOT NULL,
+    points_used INTEGER NOT NULL,
+    drawn_at    TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gacha_draws_user ON gacha_draws (user_id, drawn_at);
+
+-- LINE から届いたイベントの ID。LINE が同じイベントを送り直してきても、ガチャを2回回さないため
+CREATE TABLE IF NOT EXISTS line_events (
+    webhook_event_id TEXT PRIMARY KEY,
+    received_at      TEXT NOT NULL
 );

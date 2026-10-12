@@ -8,12 +8,6 @@
     <h1>利用者一覧</h1>
     <p class="muted">{{ summary.date | jdate }} {{ summary.generated_at | dt("%H:%M") }} 時点（1分ごとに自動で更新します）</p>
   </div>
-  {% if line_configured %}
-  <form method="post" action="/line/summary">
-    <input type="hidden" name="back_to" value="/">
-    <button type="submit" class="btn">LINEに今日のまとめを送る</button>
-  </form>
-  {% endif %}
 </div>
 
 <section class="stats" aria-label="今日のようす">

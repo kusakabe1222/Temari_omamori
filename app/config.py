@@ -12,6 +12,10 @@ from pathlib import Path
 
 BASE_DIR = Path(__file__).resolve().parent.parent  # プロジェクトのフォルダ
 
+# サーバーごとに、なければ起動を止める値
+ADMIN_REQUIRED = ("ADMIN_PASSWORD", "SYNC_API_KEY")  # 管理者用サイト（app.main）
+BOT_REQUIRED = ("LINE_CHANNEL_SECRET",)               # LINE の入口（app.bot_main）。トークンは試し運転でなければ必要
+
 
 def load_env_file(path: Path) -> dict[str, str]:
     """.env を読む。空行と # で始まる行は飛ばす。値を囲む引用符は外す。"""
@@ -36,28 +40,27 @@ class Config:
     sync_api_key: str
     session_secret: str
     db_path: Path
-    line_channel_access_token: str = ""
-    line_to: str = ""
+    line_channel_secret: str = ""        # LINE から届いたものか確かめる（署名の確認）に使う
+    line_channel_access_token: str = ""  # LINE に返事を送るときに使う
+    line_dry_run: bool = False           # True = LINE には送らず、返事を画面（とテスト）に出すだけ
 
     @property
-    def line_configured(self) -> bool:
-        return bool(self.line_channel_access_token and self.line_to)
+    def line_bot_ready(self) -> bool:
+        return bool(self.line_channel_secret and (self.line_channel_access_token or self.line_dry_run))
 
 
-def load_config(env_file: Path | None = None) -> Config:
+def load_config(env_file: Path | None = None, required: tuple[str, ...] = ADMIN_REQUIRED) -> Config:
     """環境変数を優先し、なければ .env の値を使う。必須の値がなければ起動を止める。"""
     file_values = load_env_file(env_file or BASE_DIR / ".env")
 
     def get(key: str, default: str = "") -> str:
         return os.environ.get(key, file_values.get(key, default)).strip()
 
-    admin_password = get("ADMIN_PASSWORD")
-    sync_api_key = get("SYNC_API_KEY")
-    missing = [name for name, value in (("ADMIN_PASSWORD", admin_password), ("SYNC_API_KEY", sync_api_key)) if not value]
+    missing = [name for name in required if not get(name)]
     if missing:
         raise RuntimeError(
             f"{', '.join(missing)} が設定されていません。"
-            ".env.example をコピーして .env を作り、値を入れてください（README の「準備」）。"
+            ".env に値を入れてください（README の「準備」と「LINE（本人用）」）。"
         )
 
     db_path = Path(get("DB_PATH", "data/omamori.db"))
@@ -65,11 +68,12 @@ def load_config(env_file: Path | None = None) -> Config:
         db_path = BASE_DIR / db_path
 
     return Config(
-        admin_password=admin_password,
-        sync_api_key=sync_api_key,
+        admin_password=get("ADMIN_PASSWORD"),
+        sync_api_key=get("SYNC_API_KEY"),
         # 空なら起動のたびに作る（サーバーを再起動するとログインし直しになるだけ）
         session_secret=get("SESSION_SECRET") or secrets.token_hex(32),
         db_path=db_path,
+        line_channel_secret=get("LINE_CHANNEL_SECRET"),
         line_channel_access_token=get("LINE_CHANNEL_ACCESS_TOKEN"),
-        line_to=get("LINE_TO"),
+        line_dry_run=get("LINE_DRY_RUN") in ("1", "true", "yes"),
     )

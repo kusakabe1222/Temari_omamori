@@ -1,55 +1,11 @@
 """API と画面の動作確認。実行: .\\.venv\\Scripts\\python.exe -m pytest"""
 from __future__ import annotations
 
-import sqlite3
 from datetime import datetime, timedelta, timezone
 
-from app import db, line_notify
-from tests.conftest import API_KEY, PASSWORD
-
-
-# ---------------------------------------------------------------- 準備用の関数
-
-def today_at(minutes: int) -> str:
-    """今日の 0:00 から minutes 分後（日本時間）。テストがいつ動いても「今日」になるように使う。"""
-    midnight = db.now_jst().replace(hour=0, minute=0, second=0)
-    return (midnight + timedelta(minutes=minutes)).isoformat()
-
-
-def rec(measured_at: str, steps: int) -> dict:
-    return {"measured_at": measured_at, "steps": steps}
-
-
-def sync(client, device="omamori-01", records=(), **extra):
-    body = {"device_id": device, "records": list(records), **extra}
-    return client.post("/api/sync", json=body, headers={"X-API-Key": API_KEY})
-
-
-def login(client) -> None:
-    res = client.post("/login", data={"password": PASSWORD}, follow_redirects=False)
-    assert res.status_code == 303
-
-
-def query(client, sql: str, params=()) -> list[sqlite3.Row]:
-    conn = db.connect(client.app.state.config.db_path)
-    try:
-        return conn.execute(sql, params).fetchall()
-    finally:
-        conn.close()
-
-
-def add_user(client, name: str, baseline: int) -> int:
-    client.post("/users", data={"display_name": name, "baseline_steps": str(baseline)})
-    return query(client, "SELECT id FROM users WHERE display_name = ? ORDER BY id DESC", (name,))[0]["id"]
-
-
-def assign(client, device_id: str, user_id: int | None) -> None:
-    pk = query(client, "SELECT id FROM devices WHERE device_id = ?", (device_id,))[0]["id"]
-    client.post(f"/devices/{pk}", data={"user_id": "" if user_id is None else str(user_id)})
-
-
-def user_summary(client, user_id: int) -> dict:
-    return next(u for u in client.get("/api/summary").json()["users"] if u["id"] == user_id)
+from app import db
+from tests.conftest import API_KEY
+from tests.helpers import add_user, assign, login, query, rec, save_settings, sync, today_at, user_summary
 
 
 # ---------------------------------------------------------------- POST /api/sync
@@ -178,7 +134,7 @@ def test_no_sync_alert(client):
     client.post("/devices", data={"device_id": "omamori-02", "user_id": str(user_id)})
     kinds = [a["kind"] for a in user_summary(client, user_id)["alerts"]]
     assert "no_sync" in kinds  # 一度も同期していない
-    client.post("/settings", data={"overload_percent": "150", "no_sync_hours": "0"})
+    save_settings(client, no_sync_hours=0)
     assert user_summary(client, user_id)["alerts"] == []  # 0 にすると出さない
 
 
@@ -244,11 +200,21 @@ def test_device_register_and_delete_rules(client):
 
 def test_settings_validation(client):
     login(client)
-    client.post("/settings", data={"overload_percent": "120", "no_sync_hours": "48", "line_alert_enabled": "1"})
-    assert client.get("/api/summary").json()["settings"] == {"overload_percent": 120, "no_sync_hours": 48, "line_alert_enabled": 1}
-    res = client.post("/settings", data={"overload_percent": "50", "no_sync_hours": "48"}, follow_redirects=False)
-    assert "msg=bad_input" in res.headers["location"]
-    assert client.get("/api/summary").json()["settings"]["overload_percent"] == 120
+    save_settings(client, overload_percent=120, no_sync_hours=48, steps_per_point=500, goal_bonus_points=3, gacha_cost=5)
+    assert client.get("/api/summary").json()["settings"] == {
+        "overload_percent": 120, "no_sync_hours": 48, "steps_per_point": 500, "goal_bonus_points": 3, "gacha_cost": 5}
+    for bad in ({"overload_percent": 50}, {"steps_per_point": 0}, {"gacha_cost": 0}, {"goal_bonus_points": -1}):
+        data = {key: str(value) for key, value in {**db.DEFAULT_SETTINGS, **bad}.items()}
+        res = client.post("/settings", data=data, follow_redirects=False)
+        assert "msg=bad_input" in res.headers["location"], bad
+    assert client.get("/api/summary").json()["settings"]["overload_percent"] == 120  # 変わっていない
+
+
+def test_admin_line_features_are_removed(client):
+    login(client)
+    assert client.post("/line/test").status_code in (404, 405)
+    assert client.post("/line/summary").status_code in (404, 405)
+    assert "LINEに今日のまとめを送る" not in client.get("/").text
 
 
 # ---------------------------------------------------------------- CSV
@@ -262,53 +228,14 @@ def test_export_csv(client):
     res = client.get("/api/export.csv?type=daily&from=&to=")
     assert res.status_code == 200 and res.content.startswith(b"\xef\xbb\xbf")
     lines = res.content.decode("utf-8-sig").splitlines()
-    assert lines[0].startswith("date,user_id,display_name,steps")
-    assert ",'=さくら,300," in lines[1]
+    assert lines[0] == "date,user_id,display_name,steps,record_count,goal_steps,achieved,rate_percent,points"
+    assert ",'=さくら,300," in lines[1] and lines[1].endswith(",0")  # 300歩では 0pt
 
     steps = client.get("/api/export.csv?type=steps").content.decode("utf-8-sig").splitlines()
     assert len(steps) == 3
     sync_csv = client.get("/api/export.csv?type=sync").content.decode("utf-8-sig")
     assert "距離1m" in sync_csv and "-60" in sync_csv
+    gacha_csv = client.get("/api/export.csv?type=gacha").content.decode("utf-8-sig").splitlines()
+    assert gacha_csv[0].startswith("id,drawn_at,user_id") and len(gacha_csv) == 1
     assert client.get("/api/export.csv?type=other").status_code == 400
 
-
-# ---------------------------------------------------------------- LINE
-
-def test_line_buttons_without_config(client):
-    login(client)
-    res = client.post("/line/test", follow_redirects=False)
-    assert "msg=line_not_configured" in res.headers["location"]
-
-
-def test_line_overload_alert_is_sent_once_per_day(line_client, monkeypatch):
-    sent = []
-    monkeypatch.setattr(line_notify, "send_text", lambda config, text: (sent.append(text), (True, None))[1])
-    client = line_client
-    login(client)
-    client.post("/settings", data={"overload_percent": "150", "no_sync_hours": "24", "line_alert_enabled": "1"})
-    user_id = add_user(client, "たけ", 0)  # 目標 1500歩
-    sync(client, records=[])
-    assign(client, "omamori-01", user_id)
-
-    sync(client, records=[rec(today_at(0), 2000)])  # 133%: まだ送らない
-    assert sent == []
-    sync(client, records=[rec(today_at(1), 1000)])  # 200%: 送る
-    assert len(sent) == 1 and "たけさん" in sent[0] and "3,000歩" in sent[0]
-    sync(client, records=[rec(today_at(2), 1000)])  # 同じ日は2回目を送らない
-    assert len(sent) == 1
-
-    client.post("/line/summary", data={"back_to": "/"})
-    assert len(sent) == 2 and "まとめ" in sent[1]
-    assert [r["kind"] for r in query(client, "SELECT kind FROM line_logs ORDER BY id")] == ["alert", "summary"]
-
-
-def test_line_alert_not_sent_when_disabled(line_client, monkeypatch):
-    sent = []
-    monkeypatch.setattr(line_notify, "send_text", lambda config, text: (sent.append(text), (True, None))[1])
-    client = line_client
-    login(client)
-    user_id = add_user(client, "たけ", 0)
-    sync(client, records=[])
-    assign(client, "omamori-01", user_id)
-    sync(client, records=[rec(today_at(0), 5000)])  # 初期設定では自動送信はオフ
-    assert sent == []
