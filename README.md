@@ -42,7 +42,7 @@
 | `scripts/fake_tablet.py` | にせタブレット（API にテストデータを送る） |
 | `scripts/fake_line.py` | にせ LINE（LINE の入口にテストのことばを送る） |
 | `scripts/ble_gateway.py` | PC直結の BLE 中継 |
-| `firmware/omamori_m5/` | お守り端末（M5StickS3）のプログラム（Arduino）。**まだコンパイル・実機確認をしていない** |
+| `firmware/omamori_m5/` | お守り端末（M5StickS3）のプログラム（Arduino）。コンパイルは確認ずみ、**実機確認はまだ** |
 | `docs/ble_protocol.md` | 端末と PC の BLE 通信の決まり |
 | `tests/` | 自動テスト |
 | `docs/review/` | レビュー用メモ（授業のルール） |

@@ -273,7 +273,7 @@ static void startBle() {
   dataChar = service->createCharacteristic(DATA_CHAR_UUID, NIMBLE_PROPERTY::NOTIFY);
   NimBLECharacteristic* ctrlChar = service->createCharacteristic(CTRL_CHAR_UUID, NIMBLE_PROPERTY::WRITE);
   ctrlChar->setCallbacks(new CtrlCallbacks());
-  service->start();
+  // NimBLE 2.x では、サービスはサーバーが動き出すときに自動で始まる（service->start() はいらない）
 
   // 名前（端末ID）はアドバタイズに、サービス UUID はスキャン応答に入れる（31バイトに収めるため）
   NimBLEAdvertisementData advData;
