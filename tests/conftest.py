@@ -27,8 +27,10 @@ from app.main import create_app  # noqa: E402
 
 @pytest.fixture
 def config(tmp_path) -> Config:
+    # TestClient からの接続は "testclient" という名前で届くので、通してよい機器に入れておく
     return Config(admin_password=PASSWORD, sync_api_key=API_KEY, session_secret="test-secret",
-                  db_path=tmp_path / "test.db", line_channel_secret=LINE_SECRET, line_dry_run=True)
+                  db_path=tmp_path / "test.db", line_channel_secret=LINE_SECRET, line_dry_run=True,
+                  allowed_clients=("testclient",))
 
 
 @pytest.fixture

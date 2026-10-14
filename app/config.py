@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import ipaddress
 import os
 import secrets
 from dataclasses import dataclass
@@ -43,6 +44,8 @@ class Config:
     line_channel_secret: str = ""        # LINE から届いたものか確かめる（署名の確認）に使う
     line_channel_access_token: str = ""  # LINE に返事を送るときに使う
     line_dry_run: bool = False           # True = LINE には送らず、返事を画面（とテスト）に出すだけ
+    # 管理者用サイトを開いてよい、この PC 以外の機器（IP アドレスか、192.168.137.0/24 のような範囲）
+    allowed_clients: tuple[str, ...] = ()
 
     @property
     def line_bot_ready(self) -> bool:
@@ -67,6 +70,15 @@ def load_config(env_file: Path | None = None, required: tuple[str, ...] = ADMIN_
     if not db_path.is_absolute():
         db_path = BASE_DIR / db_path
 
+    allowed_clients = tuple(item.strip() for item in get("ALLOWED_CLIENTS").split(",") if item.strip())
+    for item in allowed_clients:
+        try:
+            ipaddress.ip_network(item, strict=False)
+        except ValueError:
+            raise RuntimeError(
+                f"ALLOWED_CLIENTS の「{item}」は IP アドレスか範囲（例: 192.168.137.0/24）ではありません。"
+            ) from None
+
     return Config(
         admin_password=get("ADMIN_PASSWORD"),
         sync_api_key=get("SYNC_API_KEY"),
@@ -76,4 +88,5 @@ def load_config(env_file: Path | None = None, required: tuple[str, ...] = ADMIN_
         line_channel_secret=get("LINE_CHANNEL_SECRET"),
         line_channel_access_token=get("LINE_CHANNEL_ACCESS_TOKEN"),
         line_dry_run=get("LINE_DRY_RUN") in ("1", "true", "yes"),
+        allowed_clients=allowed_clients,
     )
