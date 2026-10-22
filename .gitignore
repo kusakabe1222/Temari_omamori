@@ -1,9 +1,6 @@
 # パスワード・キー
 .env
 
-# Claude Code がこの PC で画面を確かめるための設定（PC ごとにパスが違う）
-.claude/
-
 # Python
 .venv/
 __pycache__/
