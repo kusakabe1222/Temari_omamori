@@ -17,6 +17,7 @@
 #include <time.h>
 
 #include "config.h"
+#include "step_detector.h"
 
 // ======================================================================== 記録
 
@@ -162,54 +163,35 @@ static void updateSlotAndDay() {
 }
 
 // ======================================================================== 歩数の検出
-// 加速度の大きさから重力の分を引き、揺れの「山」を数える。
-// 1歩の中の細かい揺れや、たまたまの揺れを数えないよう、一定のリズムで CONFIRM_STEPS 歩続いてから数え始める。
+// 中身は step_detector.h。手で振っただけの揺れは数えないようにしてある（強さ・回転・向き・リズムで見分ける）。
 
-static float gravityG = 1.0f;
-static float swingG = 0.0f;
-static bool aboveHigh = false;
-static uint32_t lastPeakMs = 0;
-static uint8_t candidateSteps = 0;
-static bool walking = false;
+static StepDetector stepDetector;
 
-static void addSteps(uint32_t n) {
-  slotSteps += n;
-  todaySteps += n;
+#if STEP_DEBUG
+static void printPeak(const StepDetector::PeakInfo& p) {
+  static const char* const reasons[] = {"数えた", "はじいた: 振っている", "はじいた: 横・前後の揺れ", "はじいた: リズム"};
+  Serial.printf("[step] 間隔 %lums  揺れ %.2fg  回転 %.0f度/秒  横/上下 %.1f  → %s（合計 %lu歩）\n",
+                (unsigned long)p.intervalMs, p.maxAccelG, p.maxGyroDps, p.sidewaysRatio, reasons[p.reason],
+                (unsigned long)stepDetector.stats().counted);
 }
-
-static void onPeak(uint32_t ms) {
-  if (lastPeakMs != 0 && ms - lastPeakMs < MIN_STEP_MS) return;  // 同じ1歩の中の揺れ
-  bool rhythm = lastPeakMs != 0 && ms - lastPeakMs <= MAX_STEP_MS;
-  lastPeakMs = ms;
-  if (!rhythm) {
-    walking = false;
-    candidateSteps = 1;
-    return;
-  }
-  if (walking) {
-    addSteps(1);
-    return;
-  }
-  candidateSteps++;
-  if (candidateSteps >= CONFIRM_STEPS) {
-    addSteps(candidateSteps);
-    candidateSteps = 0;
-    walking = true;
-  }
-}
+#endif
 
 static void sampleImu(uint32_t ms) {
   if (!M5.Imu.update()) return;
   auto data = M5.Imu.getImuData();
-  float mag = sqrtf(data.accel.x * data.accel.x + data.accel.y * data.accel.y + data.accel.z * data.accel.z);
-  gravityG += (mag - gravityG) * 0.02f;         // ゆっくり追いかける平均＝重力の分
-  swingG += ((mag - gravityG) - swingG) * 0.4f;  // 揺れを少しなめらかにする
-  if (!aboveHigh && swingG > STEP_HIGH_G) {
-    aboveHigh = true;
-    onPeak(ms);
-  } else if (aboveHigh && swingG < STEP_LOW_G) {
-    aboveHigh = false;
+  uint32_t lastBefore = stepDetector.lastPeak().ms;
+  uint32_t steps = stepDetector.update(ms, data.accel.x, data.accel.y, data.accel.z,
+                                       data.gyro.x, data.gyro.y, data.gyro.z);
+  if (steps > 0) {
+    slotSteps += steps;
+    todaySteps += steps;
   }
+#if STEP_DEBUG
+  const StepDetector::PeakInfo& peak = stepDetector.lastPeak();
+  if (peak.ms != lastBefore && peak.decided) printPeak(peak);
+#else
+  (void)lastBefore;
+#endif
 }
 
 // ======================================================================== BLE
@@ -459,6 +441,9 @@ static void drawInfo(int w, int h) {
   canvas.drawString(String("時計: ") + (clockValid() ? "合っている" : "まだ合っていない"), 8, y);
   y += lineH;
   canvas.drawString(String("通信: ") + (bleConnected ? "接続中" : "待っている"), 8, y);
+  y += lineH;
+  // 歩数の検出で、歩いていないと判断してはじいた回数（振った・横揺れ・リズムがそろわない）
+  canvas.drawString(String("はじいた揺れ: ") + String((unsigned long)stepDetector.stats().rejected()) + "回", 8, y);
   y += lineH;
   if (droppedCount > 0) {
     canvas.setTextColor(TFT_ORANGE);

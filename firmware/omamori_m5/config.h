@@ -22,13 +22,24 @@ constexpr size_t   MAX_RECORDS    = 432;         // 持っておける件数（�
 constexpr uint32_t VALID_EPOCH    = 1704067200;  // 2024-01-01 00:00 UTC。これより前の時刻は「時計が合っていない」
 constexpr size_t   MAX_PER_PACKET = 40;          // 1回の通知に入れる件数の上限（MTU 247 のとき 40件）
 
-// ===== 歩数の検出（実際に身につけて歩き、数えた歩数と比べて調整する） =====
+// ===== 歩数の検出（step_detector.h。実際に身につけて歩き、数えた歩数と比べて調整する） =====
 constexpr uint32_t SAMPLE_MS     = 20;     // 加速度を読む間隔（50回/秒）
-constexpr float    STEP_HIGH_G   = 0.12f;  // 揺れがこれを超えたら「1歩の山」（単位 g）
-constexpr float    STEP_LOW_G    = 0.04f;  // 一度これより下がるまで次の山を数えない
-constexpr uint32_t MIN_STEP_MS   = 300;    // これより短い間隔の山は同じ1歩の揺れとみなす
+constexpr float    GRAVITY_ALPHA = 0.02f;  // 重力の向きを追いかける速さ（小さいほどゆっくり）
+// 1歩の候補（上下の揺れの山）
+constexpr float    STEP_HIGH_G   = 0.10f;  // 上下の揺れがこれを超えたら「1歩の山」（単位 g）
+constexpr float    STEP_LOW_G    = 0.03f;  // 一度これより下がるまで次の山を数えない
+constexpr uint32_t MIN_STEP_MS   = 350;    // これより短い間隔の山は同じ1歩の揺れとみなす
 constexpr uint32_t MAX_STEP_MS   = 2000;   // これより間があいたら、歩くのをやめたとみなす
-constexpr uint8_t  CONFIRM_STEPS = 4;      // 続けてこの歩数になったら「歩いている」として数え始める
+// 歩いているかの確かめ（手で振ったのを数えないため）
+constexpr uint8_t  CONFIRM_STEPS     = 6;      // 間隔のそろった山がこの回数続いたら、まとめて数え始める
+constexpr float    CONFIRM_TOLERANCE = 0.30f;  // たしかめるとき、間隔が平均から ±30% 以内ならそろっている
+constexpr float    WALKING_TOLERANCE = 0.50f;  // 歩いている途中で、間隔が平均から ±50% をこえたら、たしかめ直す
+constexpr float    SHAKE_ACCEL_G     = 1.2f;   // 重力を除いた揺れがこれをこえたら「振っている」（歩くだけではまず届かない）
+constexpr float    SHAKE_GYRO_DPS    = 300.0f; // 回転の速さ（度/秒）がこれをこえたら「振っている」
+constexpr uint32_t SHAKE_COOLDOWN_MS = 2000;   // 「振っている」とみなしたあと、数えない時間
+constexpr float    SIDEWAYS_RATIO    = 2.0f;   // 横・前後の揺れが上下の揺れのこの倍をこえる1歩は数えない
+// 1 にすると、山ごとに数えた／はじいた理由をシリアルモニタに出す（しきい値を調整するとき用）
+#define STEP_DEBUG 0
 
 // ===== 画面 ===============================================================
 constexpr uint32_t SCREEN_ON_MS      = 15000;  // ボタンを押してから画面が消えるまで
