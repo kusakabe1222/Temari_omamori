@@ -454,11 +454,76 @@ static void drawInfo(int w, int h) {
   }
 }
 
-static void drawScreen() {
+// ======================================================================== デバッグ用: 長押しで記録をリセット
+// ボタンB を RESET_HOLD_MS 押し続けると、端末の記録（未送信の記録・今日の歩数・はじいた揺れの回数）を消す。
+// 押しているあいだは画面に残り秒数を出し、途中で離せばやめる。時計と、サーバーに送ったデータはそのまま。
+// 高齢者に渡すときは config.h の DEBUG_RESET_ENABLED を 0 にする。
+
+static uint32_t resetHeldMs = 0;      // ボタンB を押し続けている時間（RESET_SHOW_MS をこえたら画面に出す）
+static bool resetDoneThisHold = false;  // 1回の長押しで1回だけ消す
+static uint32_t resetMessageUntil = 0;  // 「消しました」を出しておく時刻
+
+#if DEBUG_RESET_ENABLED
+static void resetRecords() {
+  recordCount = 0;
+  droppedCount = 0;
+  slotSteps = 0;
+  todaySteps = 0;
+  sentUntil = 0;
+  stepDetector = StepDetector();
+  saveState();  // 保存してある記録も消し、今日の歩数を 0 にする（日付と時計はそのまま）
+  Serial.println("[debug] ボタンB の長押しで、端末の記録をリセットしました");
+}
+#endif
+
+static void updateResetHold(uint32_t ms) {
+#if DEBUG_RESET_ENABLED
+  if (!M5.BtnB.isPressed()) {
+    resetHeldMs = 0;
+    resetDoneThisHold = false;
+    return;
+  }
+  resetHeldMs = ms - M5.BtnB.lastChange();
+  if (resetHeldMs >= RESET_SHOW_MS) screenOnSince = ms;  // 長押ししているあいだは画面を消さない
+  if (!resetDoneThisHold && resetHeldMs >= RESET_HOLD_MS) {
+    resetRecords();
+    resetDoneThisHold = true;
+    resetMessageUntil = ms + 2500;
+    lastDrawMs = 0;
+  }
+#else
+  (void)ms;
+#endif
+}
+
+static void drawReset(int w, int h, uint32_t ms) {
+  canvas.setTextDatum(middle_center);
+  canvas.setFont(&fonts::lgfxJapanGothic_20);
+  if ((int32_t)(resetMessageUntil - ms) > 0) {
+    canvas.setTextColor(TFT_GREEN);
+    canvas.drawString("記録をリセットしました", w / 2, h / 2);
+    return;
+  }
+  uint32_t left = resetHeldMs >= RESET_HOLD_MS ? 0 : (RESET_HOLD_MS - resetHeldMs + 999) / 1000;
+  canvas.setTextColor(TFT_ORANGE);
+  canvas.drawString("記録をリセットします", w / 2, h / 2 - 30);
+  canvas.setFont(&fonts::Font7);
+  canvas.drawString(String((unsigned long)left), w / 2, h / 2 + 10);
+  canvas.setFont(&fonts::lgfxJapanGothic_16);
+  canvas.setTextColor(TFT_LIGHTGREY);
+  canvas.drawString("離すとやめます", w / 2, h - 14);
+}
+
+// ======================================================================== 画面の切りかえ
+
+static void drawScreen(uint32_t ms) {
   int w = canvas.width();
   int h = canvas.height();
   canvas.fillScreen(TFT_BLACK);
-  if (infoMode) {
+  bool resetting = (resetHeldMs >= RESET_SHOW_MS && !resetDoneThisHold) || (int32_t)(resetMessageUntil - ms) > 0;
+  if (resetting) {
+    drawReset(w, h, ms);
+  } else if (infoMode) {
     drawInfo(w, h);
   } else {
     drawMain(w, h);
@@ -479,9 +544,10 @@ static void handleButtonsAndScreen(uint32_t ms) {
     screenOnSince = ms;
     lastDrawMs = 0;
   }
+  updateResetHold(ms);
   if (screenOn && ms - screenOnSince > SCREEN_ON_MS) setScreen(false);
   if (screenOn && (lastDrawMs == 0 || ms - lastDrawMs >= SCREEN_REDRAW_MS)) {
-    drawScreen();
+    drawScreen(ms);
     lastDrawMs = ms;
   }
 }
